@@ -17,7 +17,7 @@ Requirements:
 Getting started:
 --
 
-<h5>Important: uninstall original *django-oauth2-provider*</h5>
+<h4>Important: uninstall original <i>django-oauth2-provider</i></h4>
 
 **Add and configure *python-social-auth*** to your project.
 
