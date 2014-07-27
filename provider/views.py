@@ -352,6 +352,7 @@ class AccessToken(OAuthView, Mixin):
     * :attr:`get_authorization_code_grant`
     * :attr:`get_refresh_token_grant`
     * :attr:`get_password_grant`
+    * :attr:`get_facebook_grant`
     * :attr:`get_access_token`
     * :attr:`create_access_token`
     * :attr:`create_refresh_token`
@@ -377,7 +378,7 @@ class AccessToken(OAuthView, Mixin):
     Authentication backends used to authenticate a particular client.
     """
 
-    grant_types = ['authorization_code', 'refresh_token', 'password']
+    grant_types = ['authorization_code', 'refresh_token', 'password','facebook']
     """
     The default grant types supported by this view.
     """
@@ -399,6 +400,14 @@ class AccessToken(OAuthView, Mixin):
         raise NotImplementedError
 
     def get_password_grant(self, request, data, client):
+        """
+        Return a user associated with this request or an error dict.
+
+        :return: ``tuple`` - ``(True or False, user or error_dict)``
+        """
+        raise NotImplementedError
+
+    def get_facebook_grant(self, request, data, client):
         """
         Return a user associated with this request or an error dict.
 
@@ -544,6 +553,25 @@ class AccessToken(OAuthView, Mixin):
 
         return self.access_token_response(at)
 
+    def facebook(self, request, data, client):
+        """
+        Handle ``grant_type=facebook`` requests as check uid and facebook access token.
+        """
+
+        data = self.get_facebook_grant(request, data, client)
+        user = data.get('user')
+        scope = data.get('scope')
+
+        if constants.SINGLE_ACCESS_TOKEN:
+            at = self.get_access_token(request, user, scope, client)
+        else:
+            at = self.create_access_token(request, user, scope, client)
+            # Public clients don't get refresh tokens
+            if client.client_type != 1:
+                rt = self.create_refresh_token(request, user, scope, at, client)
+
+        return self.access_token_response(at)
+
     def get_handler(self, grant_type):
         """
         Return a function or method that is capable handling the ``grant_type``
@@ -556,6 +584,8 @@ class AccessToken(OAuthView, Mixin):
             return self.refresh_token
         elif grant_type == 'password':
             return self.password
+        elif grant_type == 'facebook':
+            return self.facebook
         return None
 
     def get(self, request):
