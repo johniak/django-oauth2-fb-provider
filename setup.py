@@ -22,7 +22,6 @@ setup(
     ],
     install_requires=[
         "shortuuid>=0.3",
-        "python-social-auth>=0.1.26"
     ],
     include_package_data=True,
     zip_safe=False,
