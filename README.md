@@ -19,6 +19,10 @@ Getting started:
 
 <h4>Important: uninstall original <i>django-oauth2-provider</i></h4>
 
+**Install by pip:**
+
+    pip install -e git://github.com/johniak/django-oauth2-fb-provider.git#egg=django-oauth2-fb-provider
+
 **Add and configure *python-social-auth*** to your project.
 
 **Add apps to django** (names same as in original according to compatibility):
