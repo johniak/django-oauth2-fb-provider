@@ -1,9 +1,12 @@
+import json
+import urllib2
 from django import forms
 from django.contrib.auth import authenticate
 from django.utils.encoding import smart_unicode
 from django.utils.translation import ugettext as _
 from .. import scope
-from ..constants import RESPONSE_TYPE_CHOICES, SCOPES
+from social.apps.django_app.default.models import UserSocialAuth
+from ..constants import RESPONSE_TYPE_CHOICES, SCOPES, FACEBOOK_ME_URL
 from ..forms import OAuthForm, OAuthValidationError
 from ..scope import SCOPE_NAMES
 from ..utils import now
@@ -14,6 +17,7 @@ class ClientForm(forms.ModelForm):
     """
     Form to create new consumers.
     """
+
     class Meta:
         model = Client
         fields = ('name', 'url', 'redirect_uri', 'client_type')
@@ -36,10 +40,10 @@ class ClientAuthForm(forms.Form):
         data = self.cleaned_data
         try:
             client = Client.objects.get(client_id=data.get('client_id'),
-                client_secret=data.get('client_secret'))
+                                        client_secret=data.get('client_secret'))
         except Client.DoesNotExist:
             raise forms.ValidationError(_("Client could not be validated with "
-                "key pair."))
+                                          "key pair."))
 
         data['client'] = client
         return data
@@ -80,13 +84,14 @@ class ScopeChoiceField(forms.ChoiceField):
                 raise OAuthValidationError({
                     'error': 'invalid_request',
                     'error_description': _("'%s' is not a valid scope.") % \
-                            val})
+                                         val})
 
 
 class ScopeMixin(object):
     """
     Form mixin to clean scope fields.
     """
+
     def clean_scope(self):
         """
         The scope is assembled by combining all the set flags into a single
@@ -143,7 +148,7 @@ class AuthorizationRequestForm(ScopeMixin, OAuthForm):
 
         if not response_type:
             raise OAuthValidationError({'error': 'invalid_request',
-                'error_description': "No 'response_type' supplied."})
+                                        'error_description': "No 'response_type' supplied."})
 
         types = response_type.split(" ")
 
@@ -152,7 +157,7 @@ class AuthorizationRequestForm(ScopeMixin, OAuthForm):
                 raise OAuthValidationError({
                     'error': 'unsupported_response_type',
                     'error_description': u"'%s' is not a supported response "
-                        "type." % type})
+                                         "type." % type})
 
         return response_type
 
@@ -168,7 +173,7 @@ class AuthorizationRequestForm(ScopeMixin, OAuthForm):
                 raise OAuthValidationError({
                     'error': 'invalid_request',
                     'error_description': _("The requested redirect didn't "
-                        "match the client settings.")})
+                                           "match the client settings.")})
 
         return redirect_uri
 
@@ -206,7 +211,7 @@ class RefreshTokenGrantForm(ScopeMixin, OAuthForm):
 
         try:
             token = RefreshToken.objects.get(token=token,
-                expired=False, client=self.client)
+                                             expired=False, client=self.client)
         except RefreshToken.DoesNotExist:
             raise OAuthValidationError({'error': 'invalid_grant'})
 
@@ -299,8 +304,54 @@ class PasswordGrantForm(ScopeMixin, OAuthForm):
         data = self.cleaned_data
 
         user = authenticate(username=data.get('username'),
-            password=data.get('password'))
+                            password=data.get('password'))
 
+        if user is None:
+            raise OAuthValidationError({'error': 'invalid_grant'})
+
+        data['user'] = user
+        return data
+
+
+class FacebookGrantForm(ScopeMixin, OAuthForm):
+    """
+    Validate the facebook uid and access token on a facebook grant request.
+    """
+    uid = forms.DecimalField(max_digits=30, decimal_places=0)
+    access_token = forms.CharField(required=True)
+    scope = ScopeChoiceField(choices=SCOPE_NAMES, required=False)
+
+    def clean_uid(self):
+        uid = self.cleaned_data.get('uid')
+
+        if not uid:
+            raise OAuthValidationError({'error': 'invalid_request'})
+
+        return uid
+
+    def clean_access_token(self):
+        access_token = self.cleaned_data.get('access_token')
+
+        if not access_token:
+            raise OAuthValidationError({'error': 'invalid_request'})
+
+        return access_token
+
+    def clean(self):
+        data = self.cleaned_data
+        user = None
+        try:
+            response = json.loads(urllib2.urlopen(
+                FACEBOOK_ME_URL
+                + data.get('access_token')).read())
+            response_uid = response['id']
+            if str(response_uid) != str(data.get('uid')):
+                raise OAuthValidationError({'error': 'invalid_grant'})
+        except:
+            raise OAuthValidationError({'error': 'invalid_grant'})
+
+        if UserSocialAuth.objects.filter(uid=data.get('uid'), provider='facebook').count() == 1:
+            user = UserSocialAuth.objects.get(uid=data.get('uid'), provider='facebook').user
         if user is None:
             raise OAuthValidationError({'error': 'invalid_grant'})
 
@@ -328,7 +379,7 @@ class PublicPasswordGrantForm(PasswordGrantForm):
         except Client.DoesNotExist:
             raise OAuthValidationError({'error': 'invalid_client'})
 
-        if client.client_type != 1: # public
+        if client.client_type != 1:  # public
             raise OAuthValidationError({'error': 'invalid_client'})
 
         data['client'] = client

@@ -4,7 +4,7 @@ from .. import constants
 from ..views import Capture, Authorize, Redirect
 from ..views import AccessToken as AccessTokenView, OAuthError
 from ..utils import now
-from .forms import AuthorizationRequestForm, AuthorizationForm
+from .forms import AuthorizationRequestForm, AuthorizationForm, FacebookGrantForm
 from .forms import PasswordGrantForm, RefreshTokenGrantForm
 from .forms import AuthorizationCodeGrantForm
 from .models import Client, RefreshToken, AccessToken
@@ -63,7 +63,7 @@ class AccessTokenView(AccessTokenView):
     """
     Implementation of :class:`provider.views.AccessToken`.
 
-    .. note:: This implementation does provide all default grant types defined
+    .. note:: This implementation does provide all (default + facebook) grant types defined
         in :attr:`provider.views.AccessToken.grant_types`. If you
         wish to disable any, you can override the :meth:`get_handler` method
         *or* the :attr:`grant_types` list.
@@ -88,6 +88,12 @@ class AccessTokenView(AccessTokenView):
 
     def get_password_grant(self, request, data, client):
         form = PasswordGrantForm(data, client=client)
+        if not form.is_valid():
+            raise OAuthError(form.errors)
+        return form.cleaned_data
+
+    def get_facebook_grant(self, request, data, client):
+        form = FacebookGrantForm(data, client=client)
         if not form.is_valid():
             raise OAuthError(form.errors)
         return form.cleaned_data
